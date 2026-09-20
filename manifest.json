@@ -1,0 +1,48 @@
+{
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "version": "1.6.0",
+  "manifest_version": 3,
+  "name": "ChatGPT RTL Support (Farsi/Arabic)",
+  "author": "reza rastegar",
+  "description": "RTL text support for ChatGPT, DeepSeek, Z.ai, Qwen, Grok and local DeepSeek Harness",
+  "icons": {
+    "16": "assets/img/logo.png",
+    "32": "assets/img/logo.png",
+    "48": "assets/img/logo.png",
+    "128": "assets/img/logo.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; style-src 'self' 'unsafe-inline' https://v1.fontapi.ir;"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.deepseek.com/*",
+    "https://chat.z.ai/*",
+    "https://chat.qwen.ai/*",
+    "https://grok.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.deepseek.com/*",
+        "https://chat.z.ai/*",
+        "https://chat.qwen.ai/*",
+        "https://grok.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "permissions": ["scripting", "storage", "tabs"],
+  "action": {
+    "default_title": "ChatGPT RTL Support",
+    "default_popup": "popup.html"
+  }
+}
