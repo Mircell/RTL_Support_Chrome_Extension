@@ -1,8 +1,14 @@
 // RTL Support - text-only direction. Does NOT flip layout/structure.
+// Strategy: decide the base direction of each text block from the MAJORITY of
+// its characters (not just the first strong one), then apply an explicit
+// direction + text-align. Code/pre stay LTR and are bidi-isolated.
 (function () {
   "use strict";
 
   const STYLE_ID = "custom-styles";
+  // Marker attribute storing the element's ORIGINAL dir value ("" if none),
+  // so cleanup can restore it exactly.
+  const DIR_FLAG = "data-rtl-dir";
 
   // True text-bearing elements, plus generic containers. A div/span is only
   // treated as text when it holds no block-level descendants (see
@@ -25,18 +31,25 @@
     "[contenteditable='true']", ".cm-editor", ".monaco-editor"
   ].join(",");
 
+  // Hebrew / Arabic / Persian code points.
   const RTL_RE = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g;
+  // Anything that is not a word char, whitespace, or RTL char.
   const NEUTRAL_RE = /[^\w\s\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g;
+
+  // Above this ratio of RTL characters a block is treated as RTL.
+  const RTL_RATIO_THRESHOLD = 0.3;
 
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const s = document.createElement("style");
     s.id = STYLE_ID;
     s.textContent = [
-      ".rtl-text { direction: rtl !important; text-align: right !important; unicode-bidi: plaintext !important; }",
-      ".ltr-text { direction: ltr !important; text-align: left !important; unicode-bidi: plaintext !important; }",
-      ".rtl-text ul, .rtl-text ol { direction: rtl !important; }",
-      ".rtl-text blockquote { border-right: 3px solid #8a8a8a !important; border-left: none !important; padding-right: .75em !important; padding-left: 0 !important; }"
+      ".rtl-text { direction: rtl !important; text-align: right !important; }",
+      ".ltr-text { direction: ltr !important; text-align: left !important; }",
+      ".rtl-text blockquote { border-right: 3px solid #8a8a8a !important; border-left: none !important; padding-right: .75em !important; padding-left: 0 !important; }",
+      // Code must always stay LTR and be isolated from the surrounding bidi
+      // context so it never reorders or mirrors inside Persian text.
+      "pre, code, kbd, samp { direction: ltr !important; unicode-bidi: isolate !important; text-align: left !important; }"
     ].join("\n");
     (document.head || document.documentElement).appendChild(s);
   }
@@ -55,6 +68,16 @@
     return !el.querySelector(BLOCK_CHILD_SELECTOR);
   }
 
+  // Revert an element that we previously modified.
+  function clearDir(el) {
+    el.classList.remove("rtl-text", "ltr-text");
+    if (!el.hasAttribute(DIR_FLAG)) return;
+    const original = el.getAttribute(DIR_FLAG);
+    el.removeAttribute(DIR_FLAG);
+    if (original) el.setAttribute("dir", original);
+    else el.removeAttribute("dir");
+  }
+
   function classify(el) {
     if (isSkipped(el)) return;
     if (!isTextOnlyContainer(el)) return;
@@ -62,17 +85,27 @@
     const text = (el.textContent || "").trim();
     if (!text) return;
 
-    const rtl = (text.match(RTL_RE) || []).length;
-    if (rtl === 0) return;
+    const rtlCount = (text.match(RTL_RE) || []).length;
+    if (rtlCount === 0) {
+      // No RTL characters: undo anything we may have applied earlier.
+      clearDir(el);
+      return;
+    }
 
     const visible = text.replace(NEUTRAL_RE, "").length;
     if (visible === 0) return;
 
-    const ratio = rtl / visible;
-    if (ratio > 0.3) {
+    // Remember the original dir once, so repeated scans are idempotent.
+    if (!el.hasAttribute(DIR_FLAG)) {
+      el.setAttribute(DIR_FLAG, el.getAttribute("dir") || "");
+    }
+
+    if (rtlCount / visible > RTL_RATIO_THRESHOLD) {
+      el.setAttribute("dir", "rtl");
       el.classList.add("rtl-text");
       el.classList.remove("ltr-text");
     } else {
+      el.setAttribute("dir", "ltr");
       el.classList.add("ltr-text");
       el.classList.remove("rtl-text");
     }
